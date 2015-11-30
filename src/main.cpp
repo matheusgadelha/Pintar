@@ -2,6 +2,14 @@
 
 #include <string>
 #include <fstream>
+//Trick to make it work on some new Nvidia drivers.
+#include <pthread.h>
+void junk()
+{
+	int i;
+	i = pthread_getconcurrency();
+}
+
 #undef Success
 #include <Eigen/Dense>
 

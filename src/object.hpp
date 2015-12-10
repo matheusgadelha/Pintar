@@ -10,8 +10,8 @@
 namespace Pintar
 {
 
-class Object
-{
+	class Object
+	{
 	public:
 		Object( std::string name = "Object_"+std::to_string(nextId) )
 		{
@@ -19,6 +19,7 @@ class Object
 			mName = name;
 			nextId++;
 			mParent = NULL;
+			mScale = Eigen::Vector3f(1,1,1);
 			setPosition(Eigen::Vector3f(0,0,0));
 			setRotation(Eigen::Quaternionf::Identity());
 		}
@@ -26,45 +27,32 @@ class Object
 		void setRotation( Eigen::Quaternionf q )
 		{
 			mOrientation = q;
-			mTransform = Eigen::Matrix4f::Identity();
+		//	mTransform = Eigen::Matrix4f::Identity();
 
-			mTransform = mTransform * 
-				Eigen::Affine3f(Eigen::Translation3f(mPosition)).matrix();
+		//	mTransform = mTransform * 
+		//		Eigen::Affine3f(Eigen::Translation3f(mPosition)).matrix();
 
-			Eigen::Matrix4f rotationMatrix = Eigen::Matrix4f::Identity();
-			rotationMatrix.topLeftCorner<3,3>() = mOrientation.matrix();
-			mTransform = mTransform * rotationMatrix;
+		//	Eigen::Matrix4f rotationMatrix = Eigen::Matrix4f::Identity();
+		//	rotationMatrix.topLeftCorner<3,3>() = mOrientation.matrix();
+//			mTransform = mTransform * rotationMatrix;
 		}
 
 		void setPosition( Eigen::Vector3f p )
 		{
 			mPosition = p-getParentPosition();
-			mTransform = Eigen::Matrix4f::Identity();
-
-			mTransform = mTransform * 
-				Eigen::Affine3f(Eigen::Translation3f(mPosition)).matrix();
-
-			Eigen::Matrix4f rotationMatrix = Eigen::Matrix4f::Identity();
-			rotationMatrix.topLeftCorner<3,3>() = mOrientation.matrix();
-			mTransform = mTransform * rotationMatrix;
+//			mTransform = Eigen::Matrix4f::Identity();
+//
+//			mTransform = mTransform * 
+//				Eigen::Affine3f(Eigen::Translation3f(mPosition)).matrix();
+//
+//			Eigen::Matrix4f rotationMatrix = Eigen::Matrix4f::Identity();
+//			rotationMatrix.topLeftCorner<3,3>() = mOrientation.matrix();
+//			mTransform = mTransform * rotationMatrix;
 		}
 
 		void setLocalPosition( Eigen::Vector3f p )
 		{
 			mPosition = p;
-			mTransform = Eigen::Matrix4f::Identity();
-
-			mTransform = mTransform * 
-				Eigen::Affine3f(Eigen::Translation3f(mPosition)).matrix();
-
-			Eigen::Matrix4f rotationMatrix = Eigen::Matrix4f::Identity();
-			rotationMatrix.topLeftCorner<3,3>() = mOrientation.matrix();
-			mTransform = mTransform * rotationMatrix;
-		}
-
-		Eigen::Matrix4f localTransform()
-		{
-			return mTransform;
 		}
 
 		Eigen::Matrix4f transform()
@@ -72,19 +60,20 @@ class Object
 			return getParentTransform() * localTransform();
 		}
 
-		Eigen::Vector3f getParentPosition()
+		Eigen::Matrix4f localTransform()
 		{
-			return getParentTransform().topRightCorner<3,1>();
-		}
+			Eigen::Matrix4f scale = Eigen::Matrix4f::Identity();
+			scale(0,0) = mScale[0];
+			scale(1,1) = mScale[1];
+			scale(2,2) = mScale[2];
 
-		Eigen::Quaternionf getParentRotation()
-		{
-			return Eigen::Quaternionf( getParentTransform().topLeftCorner<3,3>() );
-		}
+			Eigen::Matrix4f rotation = Eigen::Matrix4f::Identity();
+			rotation.topLeftCorner<3,3>() = mOrientation.matrix();
 
-		Eigen::Vector3f getPosition()
-		{
-			return mPosition + getParentPosition();
+			Eigen::Matrix4f translation = 
+				Eigen::Affine3f( Eigen::Translation3f(getLocalPosition())).matrix();
+
+			return translation * rotation * scale;
 		}
 
 		Eigen::Matrix4f getParentTransform()
@@ -94,16 +83,49 @@ class Object
 			else return mParent->transform();
 		}
 
+		Eigen::Vector3f getParentPosition()
+		{
+			if( getParent() != NULL ) return getParent()->getPosition();
+			else return Eigen::Vector3f(0,0,0);
+		}
+
+		Eigen::Quaternionf getParentOrientation()
+		{
+			if( getParent() != NULL ) return getParent()->getOrientation();
+			else return Eigen::Quaternionf::Identity();
+		}
+
+		Eigen::Quaternionf getOrientation()
+		{
+			return getParentOrientation() * mOrientation;
+		}
+
+		Eigen::Vector3f getPosition()
+		{
+			return getParentPosition() + mPosition;
+		}
+
+		Eigen::Vector3f getLocalPosition()
+		{
+			return mPosition;
+		}
+
 		void setParent( Object* parent )
 		{
 			mParent = parent;
 		}
 
+		Object* getParent()
+		{
+			if( mParent != NULL ) return mParent;
+			else return NULL;
+		}
+
 	protected:
 		Object* mParent;
 
-		Eigen::Matrix4f mTransform;
 		Eigen::Vector3f mPosition;
+		Eigen::Vector3f mScale;
 		Eigen::Quaternionf mOrientation;
 		std::string mName;
 		int mId;

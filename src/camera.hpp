@@ -34,13 +34,20 @@ class Camera : public Object
 			Eigen::Matrix3f R;
 			Eigen::Matrix4f viewMatrix;
 
-			R.col(2) = (target-position).normalized();
+			R.col(2) = -(target-position).normalized();
 			R.col(0) = up.cross(R.col(2)).normalized();
 			R.col(1) = R.col(2).cross(R.col(0));
 
 			Eigen::Quaternionf qr(R);
 			setRotation( qr );
 			setPosition( position );
+		}
+
+		void lookAt(
+				const Eigen::Vector3f& target,
+				const Eigen::Vector3f& up)
+		{
+			lookAt( getLocalPosition(), target, up );
 		}
 
 		void setPerspectiveProjection(float fovY, float aspect, float near, float far)
@@ -65,16 +72,7 @@ class Camera : public Object
 
 		Eigen::Matrix4f view()
 		{
-			Eigen::Matrix3f rotation = transform().topLeftCorner<3,3>();
-			Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
-
-			view.topLeftCorner<3,3>() = rotation.transpose();
-			view.topRightCorner<3,1>() = -transform().topRightCorner<3,1>();
-//			view.topRightCorner<3,1>() = -mPosition;
-//			std::cout << view << "\n---\n";
-
-			mView = view;
-			return view;
+			return transform().inverse();
 		}
 
 		Eigen::Matrix4f projection()
@@ -101,29 +99,22 @@ class Camera : public Object
 class ArcballCamera : public Camera
 {
 	public:
-		ArcballCamera() : Camera(), radius(1.0f){}
+		ArcballCamera() : Camera(), sensitivity(4.0f){}
 
 		void move( Eigen::Vector2f x1, Eigen::Vector2f x2 )
 		{
-			Eigen::Vector3f w1 = cameraToWorld(x1);
-			Eigen::Vector3f w2 = cameraToWorld(x2);
+			Eigen::Quaternionf qy, qx, q;
+			qy = Eigen::AngleAxis<float>(sensitivity*(x1[0]-x2[0]), Eigen::Vector3f(0,1,0));
+			qx = Eigen::AngleAxis<float>(sensitivity*(x1[1]-x2[1]), -Eigen::Vector3f(1,0,0));
+			Eigen::Matrix4f rotation = Eigen::Matrix4f::Identity();
+			q = qx*qy;
+			rotation.topLeftCorner<3,3>() = q.matrix();
 
-			w1[2] = sqrt( radius*radius - w1[1]*w1[1] - w1[0]*w1[0] );
-			w2[2] = sqrt( radius*radius - w2[1]*w1[1] - w2[0]*w2[0] );
-
-			w1.normalize();
-			w2.normalize();
-
-			Eigen::Vector3f rotAxis = w1.cross(w2);
-			float angle = acos( std::min(1.0f, w1.dot(w2)) );
-			Eigen::Quaternionf rot;
-			rot = Eigen::AngleAxis<float>(angle,rotAxis);
-			
-			Eigen::Vector3f newPos = rot.matrix()*mPosition;
-			lookAt( newPos, getParentPosition(), Eigen::Vector3f(0,0,1));
+			this->setPosition( q.matrix() * mPosition );
+			this->lookAt( Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0) );
 		}
 
-		float radius;
+		float sensitivity;
 };
 
 }

@@ -109,18 +109,22 @@ class Mesh : public Object
 			}
 		}
 
-		void adjustBarycenter()
+		Eigen::Vector3f barycenter()
 		{
 			Eigen::Vector3f barycenter;
 			for( size_t i=0; i<vertices.size(); ++i )
 			{
 				barycenter += vertices[i];
 			}
-			barycenter =  barycenter / (float)vertices.size();
+			return barycenter / (float)vertices.size();
+		}
 
+		void adjustBarycenter()
+		{
+			Eigen::Vector3f b = barycenter();
 			for( size_t i=0; i<vertices.size(); ++i )
 			{
-				vertices[i] -= barycenter;
+				vertices[i] -= b;
 			}
 		}
 

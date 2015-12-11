@@ -6,7 +6,11 @@ Small rendering engine with Eigen linear algebra data structures on top of OpenG
 * rigid body simulation. 
 
 The main program is a demo of the rigid body simulator where you can draw the force you want to apply to the model.
-This program requires that you have the static library of OOGL(https://github.com/Overv/OOGL/) inside the lib folder.
+
+##Dependencies
+This code requires that you have the static library of OOGL(https://github.com/Overv/OOGL/) inside the lib folder. Download it, compile it and copy the OOGL.a file to the lib folder of this project.
+
+As the main description suggests, this code also requires Eigen installed.
 
 ##Compilation
 $sh compile.sh

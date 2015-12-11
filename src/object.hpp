@@ -55,6 +55,11 @@ namespace Pintar
 			mPosition = p;
 		}
 
+		void setScale( Eigen::Vector3f s )
+		{
+			mScale = s;
+		}
+
 		Eigen::Matrix4f transform()
 		{
 			return getParentTransform() * localTransform();

@@ -28,27 +28,34 @@ void printVector3f( Eigen::Vector4f v )
 	std::cout << v[0] << " " << v[1] << " " << v[2] << std::endl;
 }
 
+const std::string sep = "\n-----\n";
+
 template <typename T>
 class Mesh : public Object
 {
 	public:
 
 		Mesh() : Object(), 
-			isRawVerticesAlloc(false){}
+			isRawDataAlloc(false), baseColor(1.0f,0.5f,0.0f){}
 
 		~Mesh()
 		{
-			delete [] raw_vertices;
+			delete [] raw_data;
 		}
 
-		void generateMesh (std::vector<Eigen::Vector3f> _vertices, std::vector<int> _indices)
+		void generateMesh (const std::vector<Eigen::Vector3f>& _vertices, 
+				const std::vector<int>& _indices)
 		{
 			vertices	= _vertices;
 			indices		= _indices;
 			adjustBarycenter();
-			computeRawVertices();
-			computeAdjacencyMatrix( vertices.size() );
+//			computeAdjacencyMatrix( vertices.size() );
 			createFaces();
+			createFaceNormals();
+			computeVertexNormals();
+			computeColors();
+			computeRawData();
+
 		}
 
 		void createFaces()
@@ -62,6 +69,89 @@ class Mesh : public Object
 				
 				mFaces.push_back( face );
 			}
+		}
+
+		Eigen::Vector3f getVertex( int idx )
+		{
+			return vertices[idx];
+		}
+
+		void createFaceNormals()
+		{
+			for( size_t i=0; i<mFaces.size(); ++i )
+			{
+				Eigen::Vector3f v0v1 = getVertex(mFaces[i][1]) - getVertex(mFaces[i][0]);
+				Eigen::Vector3f v0v2 = getVertex(mFaces[i][2]) - getVertex(mFaces[i][0]);
+				mFaceNormals.push_back( v0v1.cross(v0v2).normalized() );
+				mFaceAreas.push_back( v0v1.cross(v0v2).squaredNorm() );
+			}
+		}
+
+		void computeVertexNormals()
+		{
+			std::cout << "Computing normals...";
+			boost::progress_display show_progress( vertices.size() );
+			for( size_t i=0; i<vertices.size(); ++i )
+			{
+				std::vector<int> oneRingFaces = getOneRingFaces(i);
+				float sumAreas = sumOfFaceAreas( oneRingFaces );
+				Eigen::Vector3f vnormal(0,0,0);
+				for( size_t j = 0; j<oneRingFaces.size(); ++j )
+				{
+					vnormal += (1.0f/sumAreas) * mFaceAreas[oneRingFaces[j]] *
+						mFaceNormals[oneRingFaces[j]];
+				}
+				mVertexNormals.push_back( vnormal.normalized() );
+
+				++show_progress;
+			}
+			std::cout << "Done." << std::endl;
+		}
+
+		float sumOfFaceAreas( std::vector<int> faces_idx )
+		{
+			float result = 0.0f;
+			for( size_t i=0; i<faces_idx.size(); ++i )
+			{
+				result += mFaceAreas[faces_idx[i]];
+			}
+			return result;
+		}
+
+		void computeColors()
+		{
+			for( size_t i=0; i<vertices.size(); ++i )
+			{
+				mVertexColors.push_back( baseColor );
+			}
+		}
+
+		std::vector<int> getOneRingFaces( int idx )
+		{
+			std::vector<int> result;
+			for( size_t i=0; i<mFaces.size(); ++i )
+			{
+				if( std::find( mFaces[i].begin(), mFaces[i].end(), idx ) != mFaces[i].end() )
+				{
+					result.push_back( i );
+				}
+			}
+			return result;
+		}
+
+		std::vector<int> getOneRingVertices( int idx )
+		{
+			std::vector<int> result;
+			for( int i=0; i<mFaces.size(); ++i )
+			{
+				if( std::find( mFaces[i].begin(), mFaces[i].end(), idx ) != mFaces[i].end() )
+				{
+					result.insert( result.end(), mFaces[i].begin(), mFaces[i].end() );
+				}
+			}
+			std::sort( result.begin(), result.end() );
+			result.erase( std::unique( result.begin(), result.end() ), result.end());
+			return result;
 		}
 
 		void computeAdjacencyMatrix( unsigned int size )
@@ -88,35 +178,49 @@ class Mesh : public Object
 			std::cout << "Done." << std::endl;
 		}
 
-		void allocateRawVertices()
+		void allocateRawData()
 		{
-			if (!isRawVerticesAlloc)
+			if (!isRawDataAlloc)
 			{
-				raw_vertices		= new T[indices.size()*3];
-				raw_vertices_size	= indices.size()*3;
-				isRawVerticesAlloc	= true;
+				raw_data		= new T[indices.size()*3*3];
+				raw_data_size	= indices.size()*3*3;
+				isRawDataAlloc	= true;
 			}
 		}
 
-		void computeRawVertices()
+		void computeRawData()
 		{
-			allocateRawVertices();
+			allocateRawData();
 			for (int i=0; i<indices.size(); ++i)
 			{
-				raw_vertices[3*i]	= vertices[indices[i]][0];
-				raw_vertices[3*i+1]	= vertices[indices[i]][1];
-				raw_vertices[3*i+2]	= vertices[indices[i]][2];
+				raw_data[3*i]	= vertices[indices[i]][0];
+				raw_data[3*i+1]	= vertices[indices[i]][1];
+				raw_data[3*i+2]	= vertices[indices[i]][2];
+			}
+			
+			for (int i=0; i<indices.size(); ++i)
+			{
+				raw_data[3*i + indices.size()*3]	= mVertexNormals[indices[i]][0];
+				raw_data[3*i+1 + indices.size()*3]	= mVertexNormals[indices[i]][1];
+				raw_data[3*i+2 + indices.size()*3]	= mVertexNormals[indices[i]][2];
+			}
+			
+			for (int i=0; i<indices.size(); ++i)
+			{
+				raw_data[3*i + indices.size()*3*2]		= mVertexColors[indices[i]][0];
+				raw_data[3*i+1 + indices.size()*3*2]	= mVertexColors[indices[i]][1];
+				raw_data[3*i+2 + indices.size()*3*2]	= mVertexColors[indices[i]][2];
 			}
 		}
 
 		Eigen::Vector3f barycenter()
 		{
-			Eigen::Vector3f barycenter;
+			Eigen::Vector3f b(0,0,0);
 			for( size_t i=0; i<vertices.size(); ++i )
 			{
-				barycenter += vertices[i];
+				b += vertices[i];
 			}
-			return barycenter / (float)vertices.size();
+			return b/ (float)vertices.size();
 		}
 
 		void adjustBarycenter()
@@ -129,12 +233,16 @@ class Mesh : public Object
 		}
 
 		std::vector<Eigen::Vector3f> vertices;
-		T* raw_vertices;
-		size_t raw_vertices_size;
+		T* raw_data;
+		size_t raw_data_size;
 		std::vector<int> indices;
 		std::vector< std::vector<int> > mFaces;
 		std::vector< Eigen::Vector3f > mFaceNormals;
-		bool isRawVerticesAlloc;
+		std::vector< Eigen::Vector3f > mVertexNormals;
+		std::vector< Eigen::Vector3f > mVertexColors;
+		std::vector<float> mFaceAreas;
+		bool isRawDataAlloc;
+		Eigen::Vector3f baseColor;
 
 		Eigen::SparseMatrix<char> mAdjacency;
 };

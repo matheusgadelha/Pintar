@@ -1,6 +1,6 @@
 CC = g++
 
-CFLAGS = -Wall -ggdb -std=c++0x -pg -pthread
+CFLAGS = -Wall -ggdb -std=c++0x -pthread
 
 OOGL_STATIC_LIB = ../lib/OOGL.a
 OOGL_INCLUDE = ../include

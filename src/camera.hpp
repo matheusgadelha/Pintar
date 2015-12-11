@@ -23,7 +23,7 @@ class Camera : public Object
 			mView = Eigen::Matrix4f::Identity();
 			mProjection = Eigen::Matrix4f::Identity();
 			lookAt(Eigen::Vector3f(0,0,-1), Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0));
-			setPerspectiveProjection(3.14/3.0f,4.0f/3.0,0.1f, 1000.0f);
+			setPerspectiveProjection(3.14/3.0f,4.0f/3.0,0.3, 1000.0f);
 		}
 
 		void lookAt(
@@ -82,12 +82,17 @@ class Camera : public Object
 
 		Eigen::Vector3f cameraToWorld( Eigen::Vector2f p )
 		{
-			Eigen::Vector4f ps( p[0], p[1], mNearPlane, 1 );
-			Eigen::Matrix4f invProjView = (mProjection*mView).inverse();
+			Eigen::Vector4f ps( p[0], p[1], 0.7, 1 );
+			Eigen::Matrix4f invProjView = (mProjection*view()).inverse();
 			Eigen::Vector4f result4 =  invProjView*ps;
 
 			return Eigen::Vector3f(result4[0], result4[1], result4[2])/result4[3];
 		}
+
+//		int closestVertexFromPos( StandardMesh mesh, Eigen::Vector2f p )
+//		{
+//			return 
+//		}
 
 	private:
 		Eigen::Matrix4f mView;

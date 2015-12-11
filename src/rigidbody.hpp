@@ -10,6 +10,7 @@
 #include <cmath>
 #undef Success
 #include <Eigen/Dense>
+#include <Eigen/SVD>
 
 #include "object.hpp"
 #include "mesh.hpp"
@@ -20,7 +21,7 @@ namespace Pintar
 struct Force
 {
 	Force( Eigen::Vector3f v, Eigen::Vector3f p ) : vec(v), pos(p){}
-	Force( Eigen::Vector3f v ) : vec(v), pos(0,1.5f,0){}
+	Force( Eigen::Vector3f v ) : vec(v), pos(20.5f,0,0){}
 	Eigen::Vector3f vec;
 	Eigen::Vector3f pos;
 };
@@ -28,13 +29,13 @@ struct Force
 class RigidBody
 {
 	public:
-		RigidBody( StandardMesh* b ) : body(b), mass(1.0f)
+		RigidBody( StandardMesh* b ) : body(b), mass(0.1f)
 		{
 			position = body->getPosition();
 			orientation = body->getOrientation();
 			velocity = Eigen::Vector3f(0,0,0);
 			acceleration = Eigen::Vector3f(0,0,0);
-			angularVelocity = Eigen::Quaternionf::Identity();
+			angularVelocity = Eigen::Vector3f(0,0,0);
 			angularAcceleration = Eigen::Vector3f(0,0,0);
 
 			computeMomentOfInertia();
@@ -61,12 +62,14 @@ class RigidBody
 			position = position + dt*velocity;
 			velocity = velocity + dt*acceleration;
 
-			angularAcceleration = dt*worldSpaceMOI().inverse() * totalTorque();
-			angularVelocity = Eigen::Quaternionf( 0, angularAcceleration[0]/2, 
-					angularAcceleration[1]/2,
-					angularAcceleration[2]/2) * orientation;
-
-			orientation = angularVelocity*orientation;
+			angularAcceleration = worldSpaceMOI().inverse() * totalTorque();
+			angularVelocity = angularVelocity + dt*angularAcceleration;
+			Eigen::Matrix3f Rdot = angularVelocityMatrix( angularVelocity )*orientation.matrix();
+			Eigen::Matrix3f R = orientation.matrix() + dt*Rdot;
+			Eigen::JacobiSVD<Eigen::Matrix3f> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
+			R = svd.matrixU() * svd.matrixV().transpose();
+			Eigen::Quaternionf q(R);
+			orientation = q;
 
 			body->setPosition( position );
 			body->setRotation( orientation );
@@ -106,6 +109,8 @@ class RigidBody
 			for( size_t i=0; i<body->vertices.size(); ++i )
 			{
 				Eigen::Vector3f r = body->vertices[i] - barycenter;
+				//Alias to fix model scale
+				r = 0.1*r;
 				result(0,0) += r[1]*r[1] + r[2]*r[2];
 				result(0,1) += -r[0]*r[1];
 				result(0,2) += -r[0]*r[2];
@@ -130,7 +135,7 @@ class RigidBody
 		Eigen::Vector3f position;
 		Eigen::Quaternionf orientation;
 		Eigen::Vector3f velocity;
-		Eigen::Quaternionf angularVelocity;
+		Eigen::Vector3f angularVelocity;
 		Eigen::Vector3f acceleration;
 		Eigen::Vector3f angularAcceleration;
 		std::vector<Force> appliedForces;

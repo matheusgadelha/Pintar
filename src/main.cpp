@@ -17,28 +17,8 @@ void junk()
 #include "mesh.hpp"
 #include "camera.hpp"
 #include "rigidbody.hpp"
-
-std::string vertexShader = GLSL330(
-	in vec3 position;
-	uniform mat4 viewproj;
-
-	void main()
-	{
-		gl_Position = viewproj * vec4( position, 1.0 );
-//		gl_Position = vec4( position, 1.0 );
-	}
-);
-
-std::string fragmentShader = GLSL330(
-	out vec4 outColor;
-
-	void main()
-	{
-		outColor = vec4( 1.0, 0.5, 0.0, 1.0 );
-	}
-);
-
-const std::string sep = "\n-----\n";
+#include "shaders.hpp"
+#include "utils.hpp"
 
 int main( int argc, char** argv)
 {
@@ -54,50 +34,79 @@ int main( int argc, char** argv)
 	Pintar::MeshIO<Pintar::MeshFileType::OBJ>::loadMesh( mesh_path, mesh );
 	Pintar::ArcballCamera camera;
 	Pintar::RigidBody mesh_rb( &mesh );
-//	camera.setParent( &mesh );
 
-	GL::Window window( 800, 600, "OpenGL Window", GL::WindowStyle::Close );
+	Pintar::StandardMesh arrow;
+	Pintar::MeshIO<Pintar::MeshFileType::OBJ>::loadMesh( "models/arrow.obj", arrow );
+
+	GL::Window window( 800, 600, "Rigid Body Simulation", GL::WindowStyle::Close );
 	GL::Context& gl = window.GetContext();
+
 	gl.Enable( GL::Capability::DepthTest );
 
 	GL::Shader vert( GL::ShaderType::Vertex, vertexShader );
 	GL::Shader frag( GL::ShaderType::Fragment, fragmentShader );
 	GL::Program program( vert, frag );
 
-	GL::VertexBuffer model_vbo( mesh.raw_vertices, sizeof(float)*mesh.indices.size()*3, GL::BufferUsage::StaticDraw );
+	GL::Shader arrowvert( GL::ShaderType::Vertex, arrowVS );
+	GL::Shader arrowfrag( GL::ShaderType::Fragment, arrowFS );
+	GL::Program arrowProg( arrowvert, arrowfrag );
+
+	GL::VertexBuffer model_vbo( mesh.raw_data, sizeof(float)*mesh.indices.size()*3*3, GL::BufferUsage::StaticDraw );
 
 	GL::VertexArray model_vao;
-	model_vao.BindAttribute( program.GetAttribute( "position" ), model_vbo, GL::Type::Float, 3, 0,0 );
+	model_vao.BindAttribute( program.GetAttribute( "position" ), 
+			model_vbo, GL::Type::Float, 3, 0,0 );
+	model_vao.BindAttribute( program.GetAttribute( "normal" ), 
+			model_vbo, GL::Type::Float, 3, 0, mesh.indices.size()*3*sizeof(float) );
+	model_vao.BindAttribute( program.GetAttribute( "color" ), 
+			model_vbo, GL::Type::Float, 3, 0, mesh.indices.size()*3*2*sizeof(float) );
+
+	GL::VertexBuffer arrow_vbo( arrow.raw_data, sizeof(float)*arrow.indices.size()*3*3, GL::BufferUsage::StaticDraw );
+
+	GL::VertexArray arrow_vao;
+	arrow_vao.BindAttribute( arrowProg.GetAttribute( "position" ), 
+			arrow_vbo, GL::Type::Float, 3, 0,0 );
+
+	GL::VertexArray arrow_vao_normals;
+	arrow_vao.BindAttribute( arrowProg.GetAttribute( "normal" ), 
+			arrow_vbo, GL::Type::Float, 3, 0, arrow.indices.size()*3*sizeof(float) );
+
+	GL::VertexArray arrow_vao_colors;
+//	arrow_vao.BindAttribute( arrowProg.GetAttribute( "color" ), 
+//			arrow_vbo, GL::Type::Float, 3, 0, arrow.indices.size()*3*2*sizeof(float) );
+
+	gl.ClearColor( GL::Color(1,1,1) );
+
 
 	Eigen::Quaternion<float> q;
 	q = Eigen::AngleAxis<float>(gl.Time(), Eigen::Vector3f(0,1,0));
 	camera.setPosition( Eigen::Vector3f(0,0,2));
 	camera.lookAt( Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0));
 
-	mesh_rb.applyForce( Pintar::Force( Eigen::Vector3f(-2,0,0) ) );
+//	mesh_rb.applyForce( Pintar::Force( Eigen::Vector3f(0,0,2) ) );
 
 	bool mouseDown = false;
+	bool mouseMiddleDown = false;
 	GL::Event ev;
 	Eigen::Vector2f x1, x2;
+	Eigen::Vector3f arrOrigin;
+	Eigen::Vector3f arrDest;
+	bool arrowForce = false;
 	while( window.IsOpen() )
 	{
 		while ( window.GetEvent( ev ) )
 		{
-			if( ev.Type == GL::Event::MouseDown ){ 
-				mouseDown = true; 
+			//Handling camera movement
+			if( ev.Type == GL::Event::MouseDown && ev.Mouse.Button == GL::MouseButton::Right ){ 
+				mouseMiddleDown = true; 
 
 				x1[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
 				x1[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
 						(float)window.GetHeight())-1.0f;
 
-			//	std::cout << "Camera point: \n" << x1 << std::endl;
-			//	std::cout << "World point: \n" << camera.cameraToWorld(x1) << std::endl;
-			//	std::cout << sep << camera.getPosition() << sep << std::endl;
-			} else if( ev.Type == GL::Event::MouseUp ){
-				mouseDown = false;
 			} 
 
-			if( ev.Type == GL::Event::MouseMove && mouseDown )
+			if( ev.Type == GL::Event::MouseMove && mouseMiddleDown )
 			{
 				x2[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
 				x2[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
@@ -107,21 +116,60 @@ int main( int argc, char** argv)
 				
 				x1 = x2;
 			}
+
+			if( ev.Type == GL::Event::MouseUp && 
+					ev.Mouse.Button == GL::MouseButton::Right ){
+				mouseMiddleDown = false;
+			} 
+
+			//Handling forces
+			if( ev.Type == GL::Event::MouseDown && ev.Mouse.Button == GL::MouseButton::Left ){ 
+				mouseDown = true; 
+				arrowForce = true;
+
+				x1[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
+				x1[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
+						(float)window.GetHeight())-1.0f;
+
+				arrOrigin = camera.cameraToWorld( x1 );
+			} 
+
+			if( ev.Type == GL::Event::MouseMove && mouseDown )
+			{
+				x2[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
+				x2[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
+						(float)window.GetHeight())-1.0f;
+
+				arrDest = camera.cameraToWorld( x2 );
+			}
+
+			if( ev.Type == GL::Event::MouseUp && 
+					ev.Mouse.Button == GL::MouseButton::Left ){
+				mouseDown = false;
+				arrowForce = false;
+				mesh_rb.applyForce(
+						Pintar::Force((arrDest - arrOrigin), arrDest ) );
+			}
+			
 		}
-
-		q = Eigen::AngleAxis<float>(gl.Time()/10.0f, Eigen::Vector3f(1,0,0));
-//		mesh.setPosition( Eigen::Vector3f(0,0,-1)*gl.Time()/5.0f);
-
-		Eigen::Quaternionf mq;
-		mq =  Eigen::AngleAxis<float>(gl.Time(), Eigen::Vector3f(0,0,1) );
-
-//		mesh.setRotation( mq );
 
 		mesh_rb.simulateEuler( 0.01f );
 		
 		gl.Clear();
-		program.SetUniform( "viewproj", camera.projection() * camera.view() * mesh.transform());
-		gl.DrawArrays( model_vao, GL::Primitive::Triangles, 0, mesh.indices.size() );
+		drawMesh( mesh, model_vao, camera, program, gl );
+
+		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0), 
+				GL::Vec3(0,0.3,0), arrow_vao, camera, arrowProg, gl );
+		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(1,0,0), 
+				GL::Vec3(0.3,0,0), arrow_vao, camera, arrowProg, gl );
+		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,0,1), 
+				GL::Vec3(0,0,0.3), arrow_vao, camera, arrowProg, gl );
+
+		if( arrowForce )
+		{
+			drawArrow(arrow, arrOrigin, arrDest, 
+					GL::Vec3(1.0,1.0,0.3), arrow_vao, camera, arrowProg, gl );
+		}
 
 		window.Present();
 	}

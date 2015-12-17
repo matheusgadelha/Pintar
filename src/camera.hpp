@@ -70,6 +70,28 @@ class Camera : public Object
 			mProjection = projectionMatrix;
 		}
 
+		void setOrthographicProjections( float size, float aspect, float near, float far )
+		{
+			mNearPlane = near;
+			mFarPlane = far;
+
+			float right = (size * aspect)/2.0f;
+			float left = -(size * aspect)/2.0f;
+			float top = size/2.0f;
+			float bottom = -size/2.0f;
+			
+			Eigen::Matrix4f projectionMatrix = Eigen::Matrix4f::Identity();
+
+			projectionMatrix(0,0) = 2.0f/(right-left);
+			projectionMatrix(1,1) = 2.0f/(top-bottom);
+			projectionMatrix(2,2) = -2.0f/(far-near);
+			projectionMatrix(0,3) = -(right+left)/(right-left);
+			projectionMatrix(1,3) = -(top+bottom)/(top-bottom);
+			projectionMatrix(2,3) = -(far+near)/(far-near);
+
+			mProjection = projectionMatrix;
+		}
+
 		Eigen::Matrix4f view()
 		{
 			return transform().inverse();

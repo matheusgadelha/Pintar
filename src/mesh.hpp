@@ -51,11 +51,34 @@ class Mesh : public Object
 			adjustBarycenter();
 //			computeAdjacencyMatrix( vertices.size() );
 			createFaces();
+			computeVertexOneRings();
 			createFaceNormals();
 			computeVertexNormals();
 			computeColors();
 			computeRawData();
 
+			printSummary();
+		}
+
+		void printSummary()
+		{
+			std::cout << "=======================================" << std::endl;
+			std::cout << "Number of Vertices: " << vertices.size() << std::endl;
+			std::cout << "Number of Faces: " << mFaces.size() << std::endl;
+			std::cout << "=======================================" << std::endl;
+			std::cout << "---" << std::endl;
+		}
+
+		void computeVertexOneRings()
+		{
+			std::cout << "Computing oneRings...";
+			boost::progress_display show_progress( vertices.size() );
+			for( size_t i=0; i<vertices.size(); ++i )
+			{
+				oneRings.push_back( getOneRingVertices(i) );
+				++show_progress;
+			}
+			std::cout << "Done." << std::endl;
 		}
 
 		void createFaces()
@@ -149,6 +172,8 @@ class Mesh : public Object
 					result.insert( result.end(), mFaces[i].begin(), mFaces[i].end() );
 				}
 			}
+			result.erase(std::remove(result.begin(), result.end(), idx), result.end());
+
 			std::sort( result.begin(), result.end() );
 			result.erase( std::unique( result.begin(), result.end() ), result.end());
 			return result;
@@ -232,10 +257,25 @@ class Mesh : public Object
 			}
 		}
 
+		void changeVertexPos( int idx, Eigen::Vector3f newPos )
+		{
+			vertices[idx] = newPos;
+			for( size_t i=0; i<indices.size(); ++i )
+			{
+				if( indices[i] == idx )
+				{
+					raw_data[3*i] = newPos[0];
+					raw_data[3*i+1] = newPos[1];
+					raw_data[3*i+2] = newPos[2];
+				}
+			}
+		}
+
 		std::vector<Eigen::Vector3f> vertices;
 		T* raw_data;
 		size_t raw_data_size;
 		std::vector<int> indices;
+		std::vector< std::vector<int> > oneRings;
 		std::vector< std::vector<int> > mFaces;
 		std::vector< Eigen::Vector3f > mFaceNormals;
 		std::vector< Eigen::Vector3f > mVertexNormals;

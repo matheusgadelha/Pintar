@@ -45,8 +45,18 @@ namespace Pintar
 			GL::Program program, 
 			GL::Context& gl )
 	{
+		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 		gl.UseProgram( program );
 		program.SetUniform( "mvp", camera.projection() * camera.view() * mesh.transform());
+		program.SetUniform("wireColor",GL::Vec3(1,1,1));
+		program.SetUniform( "normalMatrix", 
+				(camera.view() * mesh.transform()).inverse().transpose());
+		gl.DrawArrays( vao, GL::Primitive::Triangles, 0, mesh.indices.size() );
+		
+		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+		gl.UseProgram( program );
+		program.SetUniform( "mvp", camera.projection() * camera.view() * mesh.transform());
+		program.SetUniform("wireColor",GL::Vec3(0,0,0));
 		program.SetUniform( "normalMatrix", 
 				(camera.view() * mesh.transform()).inverse().transpose());
 		gl.DrawArrays( vao, GL::Primitive::Triangles, 0, mesh.indices.size() );
@@ -60,6 +70,7 @@ namespace Pintar
 			GL::Program program, 
 			GL::Context& gl )
 	{
+		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 		gl.UseProgram( program );
 		program.SetUniform( "mvp", camera.projection() * camera.view() * mesh.transform());
 		program.SetUniform( "Color", color);
@@ -78,6 +89,7 @@ namespace Pintar
 			GL::Program program, 
 			GL::Context& gl )
 	{
+		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
 		Eigen::Matrix4f transform = arrowTransform( from, to );
 		gl.UseProgram( program );
 		program.SetUniform( "mvp", camera.projection() * camera.view() * transform);

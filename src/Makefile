@@ -10,6 +10,8 @@ LIBS = $(OOGL_STATIC_LIB) -lX11 -lXrandr -lGL -lm
 
 INCLUDES = -I $(OOGL_INCLUDE) -I $(EIGEN_INCLUDE)
 
-all: main.cpp ../bin
-	$(CC) $(CFLAGS) main.cpp -o main $(INCLUDES) $(LIBS)
-	mv main ../bin
+all: main.cpp arapdemo.cpp ../bin
+	#$(CC) $(CFLAGS) main.cpp -o main $(INCLUDES) $(LIBS)
+	#mv main ../bin
+	$(CC) $(CFLAGS) arapdemo.cpp -o arapdemo $(INCLUDES) $(LIBS)
+	mv arapdemo ../bin

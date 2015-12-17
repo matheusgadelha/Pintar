@@ -19,6 +19,7 @@ void junk()
 #include "rigidbody.hpp"
 #include "shaders.hpp"
 #include "utils.hpp"
+#include "arap.hpp"
 
 int main( int argc, char** argv)
 {
@@ -33,8 +34,9 @@ int main( int argc, char** argv)
 	Pintar::StandardMesh mesh;
 	Pintar::MeshIO<Pintar::MeshFileType::OBJ>::loadMesh( mesh_path, mesh );
 	Pintar::ArcballCamera camera;
-	camera.setOrthographicProjections(3,4.0f/3.0f,0.2,100);
+	camera.setOrthographicProjections(2,4.0f/3.0f,0.2,100);
 	Pintar::RigidBody mesh_rb( &mesh );
+	Pintar::ARAPDeform arapdef( &mesh );
 
 	Pintar::StandardMesh arrow;
 	Pintar::MeshIO<Pintar::MeshFileType::OBJ>::loadMesh( "models/arrow.obj", arrow );
@@ -52,7 +54,7 @@ int main( int argc, char** argv)
 	GL::Shader arrowfrag( GL::ShaderType::Fragment, arrowFS );
 	GL::Program arrowProg( arrowvert, arrowfrag );
 
-	GL::VertexBuffer model_vbo( mesh.raw_data, sizeof(float)*mesh.indices.size()*3*3, GL::BufferUsage::StaticDraw );
+	GL::VertexBuffer model_vbo( mesh.raw_data, sizeof(float)*mesh.indices.size()*3*3, GL::BufferUsage::DynamicDraw );
 
 	GL::VertexArray model_vao;
 	model_vao.BindAttribute( program.GetAttribute( "position" ), 
@@ -76,7 +78,6 @@ int main( int argc, char** argv)
 //	arrow_vao.BindAttribute( arrowProg.GetAttribute( "color" ), 
 //			arrow_vbo, GL::Type::Float, 3, 0, arrow.indices.size()*3*2*sizeof(float) );
 
-	gl.ClearColor( GL::Color(1,1,1) );
 
 
 	Eigen::Quaternion<float> q;
@@ -95,6 +96,7 @@ int main( int argc, char** argv)
 	bool arrowForce = false;
 	while( window.IsOpen() )
 	{
+		gl.ClearColor( GL::Color(255,255,255,255) );
 		while ( window.GetEvent( ev ) )
 		{
 			//Handling camera movement
@@ -125,46 +127,30 @@ int main( int argc, char** argv)
 
 			//Handling forces
 			if( ev.Type == GL::Event::MouseDown && ev.Mouse.Button == GL::MouseButton::Left ){ 
-				mouseDown = true; 
-				arrowForce = true;
-
-				x1[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
-				x1[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
-						(float)window.GetHeight())-1.0f;
-
-				arrOrigin = camera.cameraToWorld( x1 );
+				mesh.changeVertexPos(2,Eigen::Vector3f(1,1,0));
 			} 
-
-			if( ev.Type == GL::Event::MouseMove && mouseDown )
-			{
-				x2[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
-				x2[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
-						(float)window.GetHeight())-1.0f;
-
-				arrDest = camera.cameraToWorld( x2 );
-			}
 
 			if( ev.Type == GL::Event::MouseUp && 
 					ev.Mouse.Button == GL::MouseButton::Left ){
-				mouseDown = false;
-				arrowForce = false;
-				mesh_rb.applyForce(
-						Pintar::Force((arrDest - arrOrigin), arrDest ) );
+				mesh.changeVertexPos(2,Eigen::Vector3f(-1,1,0));
 			}
 			
 		}
 
-		mesh_rb.simulateEuler( 0.01f );
+		model_vbo.Data( mesh.raw_data, sizeof(float)*mesh.indices.size()*3*3,
+				GL::BufferUsage::DynamicDraw );
+
+//		mesh_rb.simulateEuler( 0.01f );
 		
 		gl.Clear();
 		drawMesh( mesh, model_vao, camera, program, gl );
 
 		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0), 
-				GL::Vec3(0,0.3,0), arrow_vao, camera, arrowProg, gl );
+				GL::Vec3(0,1,0), arrow_vao, camera, arrowProg, gl );
 		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(1,0,0), 
-				GL::Vec3(0.3,0,0), arrow_vao, camera, arrowProg, gl );
+				GL::Vec3(1,0,0), arrow_vao, camera, arrowProg, gl );
 		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,0,1), 
-				GL::Vec3(0,0,0.3), arrow_vao, camera, arrowProg, gl );
+				GL::Vec3(0,0,1), arrow_vao, camera, arrowProg, gl );
 
 		if( arrowForce )
 		{

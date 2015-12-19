@@ -11,7 +11,7 @@
 #undef Success
 #include <Eigen/Dense>
 
-#include "object.hpp"
+#include "mesh.hpp"
 
 namespace Pintar
 {
@@ -109,6 +109,29 @@ class Camera : public Object
 			Eigen::Vector4f result4 =  invProjView*ps;
 
 			return Eigen::Vector3f(result4[0], result4[1], result4[2])/result4[3];
+		}
+
+		int selectVertex( const Eigen::Vector2f sc, const StandardMesh& mesh )
+		{
+			std::vector<Eigen::Vector3f> screenSpaceVertices;
+
+			for( size_t i=0; i<mesh.vertices.size(); ++i )
+			{
+				Eigen::Vector3f v = mesh.vertices[i];
+				Eigen::Vector4f hv = Eigen::Vector4f( v[0], v[1], v[2], 1 );
+				Eigen::Vector4f tv = projection() * view() * hv;
+				screenSpaceVertices.push_back( Eigen::Vector3f( tv[0], tv[1], tv[2] ));
+			}
+
+			std::vector<Eigen::Vector3f> candidates;
+
+			for( size_t i=0; i<screenSpaceVertices.size(); ++i )
+			{
+				Eigen::Vector2f screen_vert(screenSpaceVertices[i][0], screenSpaceVertices[i][1]);
+				if( (screen_vert-sc).norm() < 0.02 ) return i;
+			}
+
+			return -1;
 		}
 
 //		int closestVertexFromPos( StandardMesh mesh, Eigen::Vector2f p )

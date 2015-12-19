@@ -89,7 +89,7 @@ std::string arrowFS = GLSL330(
 	{
 		float diff_shading = diff*max(dot(-ldir,Normal),0);
 		vec3 final_color = (diff_shading + env)*Color;
-		outColor = vec4(Color,1);
+		outColor = vec4(Color,0.5f);
 	}
 );
 

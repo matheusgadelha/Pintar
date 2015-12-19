@@ -36,7 +36,7 @@ class Mesh : public Object
 	public:
 
 		Mesh() : Object(), 
-			isRawDataAlloc(false), baseColor(1.0f,0.5f,0.0f){}
+			isRawDataAlloc(false), baseColor(0.6f,0.5f,0.7f){}
 
 		~Mesh()
 		{
@@ -52,6 +52,7 @@ class Mesh : public Object
 //			computeAdjacencyMatrix( vertices.size() );
 			createFaces();
 			computeVertexOneRings();
+			computeVertexRingFaces();
 			createFaceNormals();
 			computeVertexNormals();
 			computeColors();
@@ -81,6 +82,18 @@ class Mesh : public Object
 			std::cout << "Done." << std::endl;
 		}
 
+		void computeVertexRingFaces()
+		{
+			std::cout << "Computing adjacent faces...";
+			boost::progress_display show_progress( vertices.size() );
+			for( size_t i=0; i<vertices.size(); ++i )
+			{
+				oneRingFaces.push_back( getOneRingFaces(i) );
+				++show_progress;
+			}
+			std::cout << "Done." << std::endl;
+		}
+
 		void createFaces()
 		{
 			for( size_t i=0; i<indices.size(); i+=3 )
@@ -97,6 +110,15 @@ class Mesh : public Object
 		Eigen::Vector3f getVertex( int idx )
 		{
 			return vertices[idx];
+		}
+
+		int sharedVertexOnFace( int v1, int v2, int face )
+		{
+			for( int i=0; i<mFaces[face].size(); ++i )
+				if( mFaces[face][i] != v1 && mFaces[face][i] != v2 )
+					return mFaces[face][i];
+
+			return -1;
 		}
 
 		void createFaceNormals()
@@ -172,10 +194,10 @@ class Mesh : public Object
 					result.insert( result.end(), mFaces[i].begin(), mFaces[i].end() );
 				}
 			}
-			result.erase(std::remove(result.begin(), result.end(), idx), result.end());
 
 			std::sort( result.begin(), result.end() );
 			result.erase( std::unique( result.begin(), result.end() ), result.end());
+			result.erase(std::remove(result.begin(), result.end(), idx), result.end());
 			return result;
 		}
 
@@ -276,6 +298,7 @@ class Mesh : public Object
 		size_t raw_data_size;
 		std::vector<int> indices;
 		std::vector< std::vector<int> > oneRings;
+		std::vector< std::vector<int> > oneRingFaces;
 		std::vector< std::vector<int> > mFaces;
 		std::vector< Eigen::Vector3f > mFaceNormals;
 		std::vector< Eigen::Vector3f > mVertexNormals;

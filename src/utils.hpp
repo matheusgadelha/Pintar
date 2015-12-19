@@ -61,7 +61,51 @@ namespace Pintar
 				(camera.view() * mesh.transform()).inverse().transpose());
 		gl.DrawArrays( vao, GL::Primitive::Triangles, 0, mesh.indices.size() );
 	}
-	
+
+	void drawSphere( 
+			StandardMesh& mesh, 
+			Eigen::Vector3f pos,
+			float size,
+			GL::Vec3 color,
+			GL::VertexArray& vao,
+			Camera& camera, 
+			GL::Program program, 
+			GL::Context& gl )
+	{
+		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+		gl.UseProgram( program );
+		mesh.setPosition( pos );
+		mesh.setScale( Eigen::Vector3f(size,size,size) );
+		program.SetUniform( "mvp", camera.projection() * camera.view() * mesh.transform());
+		program.SetUniform( "Color", color);
+		program.SetUniform( "normalMatrix", 
+				(camera.view() * mesh.transform()).inverse().transpose());
+		gl.DrawArrays( vao, GL::Primitive::Triangles, 0, mesh.indices.size() );
+	}
+
+	void drawSphereOnVertex( 
+			StandardMesh& mesh, 
+			StandardMesh& targetMesh, 
+			int vidx,
+			float size,
+			GL::Vec3 color,
+			GL::VertexArray& vao,
+			Camera& camera, 
+			GL::Program program, 
+			GL::Context& gl )
+	{
+		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+		gl.UseProgram( program );
+		mesh.setPosition( targetMesh.vertices[vidx] );
+		mesh.setScale( Eigen::Vector3f(size,size,size) );
+		program.SetUniform( "mvp", camera.projection() * camera.view() * 
+				targetMesh.transform() * mesh.transform());
+		program.SetUniform( "Color", color);
+		program.SetUniform( "normalMatrix", 
+				(camera.view() * mesh.transform()).inverse().transpose());
+		gl.DrawArrays( vao, GL::Primitive::Triangles, 0, mesh.indices.size() );
+	}
+
 	void drawArrow( 
 			StandardMesh& mesh, 
 			GL::Vec3 color,

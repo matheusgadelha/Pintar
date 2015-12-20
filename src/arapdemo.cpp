@@ -24,11 +24,17 @@ void junk()
 int main( int argc, char** argv)
 {
 	std::string mesh_path;
-	if (argc < 2)
+	if (argc < 3)
 	{
-		std::cout << "ERROR: Specify the path to a mesh.\n";
+		std::cout << "ERROR: Specify the path to a mesh and a deformation method (laplacian or arap).\n";
+		std::cout << "Example: ./bin/arapdemo models/cactus_small.obj arap." << std::endl;
+
 		return -1;
 	}
+
+	bool estimateRotation = true;
+	if( strcmp(argv[2],"laplacian") == 0 ) estimateRotation = false;
+	if( strcmp(argv[2],"arap") == 0 ) estimateRotation = true;
 
 	mesh_path = argv[1];
 	Pintar::StandardMesh mesh;
@@ -39,15 +45,6 @@ int main( int argc, char** argv)
 	Pintar::RigidBody mesh_rb( &mesh );
 	Pintar::ARAPDeform arapdef( &mesh );
 
-//	arapdef.setFixedVertex(170);
-//	arapdef.setControlVertex(261);
-//	arapdef.setFixedVertex(1);
-//	arapdef.setFixedVertex(4);
-//	arapdef.setFixedVertex(5);
-//	arapdef.setVertexPosition(261,
-//			mesh.vertices[261] + Eigen::Vector3f(0.02f,0.02f,0.02f));
-//	arapdef.applyDeformation();
-
 	Pintar::StandardMesh arrow;
 	Pintar::MeshIO<Pintar::MeshFileType::OBJ>::loadMesh( "models/arrow.obj", arrow );
 	Pintar::StandardMesh sphere;
@@ -57,7 +54,6 @@ int main( int argc, char** argv)
 	GL::Context& gl = window.GetContext();
 
 	gl.Enable( GL::Capability::DepthTest );
-//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	GL::Shader vert( GL::ShaderType::Vertex, vertexShader );
 	GL::Shader frag( GL::ShaderType::Fragment, fragmentShader );
@@ -99,32 +95,34 @@ int main( int argc, char** argv)
 			sphere_vbo, GL::Type::Float, 3, 0, sphere.indices.size()*3*sizeof(float) );
 
 
-//	arrow_vao.BindAttribute( arrowProg.GetAttribute( "color" ), 
-//			arrow_vbo, GL::Type::Float, 3, 0, arrow.indices.size()*3*2*sizeof(float) );
-
-	Eigen::Quaternion<float> q;
-	q = Eigen::AngleAxis<float>(gl.Time(), Eigen::Vector3f(0,1,0));
 	camera.setPosition( Eigen::Vector3f(0,0,2));
 	camera.lookAt( Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0));
-
-//	mesh_rb.applyForce( Pintar::Force( Eigen::Vector3f(0,0,2) ) );
-//
-
-	for( size_t i=0; i<mesh.vertices.size(); ++i )
-	{
-		std::cout << mesh.vertices[i] << std::endl;
-	}
 
 	bool mouseLeftDown = false;
 	bool mouseMiddleDown = false;
 	bool mouseRightDown = false;
 	bool shiftDown = false;
 	bool ctrlDown = false;
-	GL::Event ev;
 	Eigen::Vector2f x1, x2;
 	Eigen::Vector2f upclick;
+	Eigen::Vector2f mc1, mc2;
 	Eigen::Vector3f arrOrigin;
 	Eigen::Vector3f arrDest;
+
+	GL::Event ev;
+
+	std::cout << std::endl << std::endl << "---" << std::endl << "Instructions:" << std::endl
+		<< "-> Use the middle mouse button to rotate the camera and the scroll to zoom in/out" 
+		<< std::endl
+		<< "-> Use the right mouse button to insert fixed points (red vertices)" << std::endl
+		<< "-> Use the right mouse button while holding ctrl to insert control points (green)"
+		<< std::endl
+		<< "-> Use any of the commands before while holding shift to remove fixed or control points"
+		<<"(dont forget to also press ctrl to remove the later!)" << std::endl
+		<< "-> Move the mouse while pressing the left mouse button to apply deformations" 
+		<< std::endl
+		<<"->Press ESC to clear all points" << std::endl
+		<< "Have fun!!!" << std::endl;
 
 	float screenSize = 2.0f;
 	while( window.IsOpen() )
@@ -158,14 +156,17 @@ int main( int argc, char** argv)
 			//Zoom
 			if( ev.Type == GL::Event::MouseWheel )
 			{
-				screenSize -= 0.2f*ev.Mouse.Delta;
-				if( screenSize < 0.0f ) screenSize += 0.2f*ev.Mouse.Delta;
+				screenSize -= 0.05f*ev.Mouse.Delta;
+				if( screenSize < 0.0f ) screenSize += 0.05f*ev.Mouse.Delta;
 				camera.setOrthographicProjections( screenSize, 4.0f/3.0f, 0.2f, 1000.0f );
 			}
 
 			//Handling Mouse Left Button
 			if( ev.Type == GL::Event::MouseDown && ev.Mouse.Button == GL::MouseButton::Left ){ 
 				mouseLeftDown = true;
+				mc1[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
+				mc1[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
+						(float)window.GetHeight())-1.0f;
 			} 
 
 			if( ev.Type == GL::Event::MouseUp && 
@@ -181,6 +182,7 @@ int main( int argc, char** argv)
 			if( ev.Type == GL::Event::MouseUp && 
 					ev.Mouse.Button == GL::MouseButton::Right ){
 				mouseRightDown = false;
+				arapdef.preProcess();
 			}
 
 			//Handling Shift
@@ -197,6 +199,15 @@ int main( int argc, char** argv)
 			if( ev.Type == GL::Event::KeyUp && ev.Key.Code == GL::Key::Control )
 				ctrlDown = false;
 
+			//Clear editing handles
+			if( ev.Type == GL::Event::KeyUp && ev.Key.Code == GL::Key::Escape )
+			{
+				arapdef.laplacianComputed = false;
+				arapdef.updatedVertices = false;
+				arapdef.clearFixedVertices();
+				arapdef.clearControlVertices();
+			}
+
 			//Inserting and Removing fixed points
 			if( mouseRightDown && !ctrlDown )
 			{
@@ -207,7 +218,6 @@ int main( int argc, char** argv)
 				int vid = camera.selectVertex( upclick, mesh );
 				if( vid >= 0 )
 				{
-					std::cout << vid << std::endl;
 					arapdef.setFixedVertex(vid);
 				}
 			}
@@ -243,21 +253,35 @@ int main( int argc, char** argv)
 				if( vid >= 0 ) arapdef.unsetControlVertex(vid);
 			}
 
-			if( ev.Type == GL::Event::KeyUp && ev.Key.Code == GL::Key::T )
+			if( ev.Type == GL::Event::MouseMove && mouseLeftDown )
 			{
-//				arapdef.setVertexPosition(261,
-//					mesh.vertices[261] + Eigen::Vector3f(0.02f,0.02f,0.02f));
-//				arapdef.applyDeformation();
-//				arapdef.translateControlVertices( Eigen::Vector3f(1.f,1.f,1.f));
-				arapdef.translateControlVertices( Eigen::Vector3f(0.1,0.1,0.1));
+				mc2[0] = 2*(ev.Mouse.X/(float)window.GetWidth())-1.0f;
+				mc2[1] = 2*(( window.GetHeight()-ev.Mouse.Y )/
+						(float)window.GetHeight())-1.0f;
+				arapdef.translateControlVertices(
+						(camera.cameraToWorld(mc2)-camera.cameraToWorld(mc1))
+				);
+				mc1 = mc2;
 			}
-			
 		}
 
 		model_vbo.Data( mesh.raw_data, sizeof(float)*mesh.indices.size()*3*3,
 				GL::BufferUsage::DynamicDraw );
 
-//		mesh_rb.simulateEuler( 0.01f );
+		if(arapdef.laplacianComputed && arapdef.updatedVertices)
+//		if(arapdef.laplacianComputed)
+		{
+			arapdef.applyDeformation();
+			arapdef.computeRotations();
+
+			arapdef.iter++;
+			if( arapdef.iter == arapdef.maxIter )
+			{
+				arapdef.iter = 0;
+				arapdef.updatedVertices = false;
+//				arapdef.clearData();
+			}
+		}
 		
 		gl.Clear();
 		drawMesh( mesh, model_vao, camera, program, gl );
@@ -280,12 +304,12 @@ int main( int argc, char** argv)
 			}
 		}
 
-		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0), 
-				GL::Vec3(0,1,0), arrow_vao, camera, arrowProg, gl );
-		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(1,0,0), 
-				GL::Vec3(1,0,0), arrow_vao, camera, arrowProg, gl );
-		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,0,1), 
-				GL::Vec3(0,0,1), arrow_vao, camera, arrowProg, gl );
+//		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,1,0), 
+//				GL::Vec3(0,1,0), arrow_vao, camera, arrowProg, gl );
+//		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(1,0,0), 
+//				GL::Vec3(1,0,0), arrow_vao, camera, arrowProg, gl );
+//		drawArrow(arrow, Eigen::Vector3f(0,0,0), Eigen::Vector3f(0,0,1), 
+//				GL::Vec3(0,0,1), arrow_vao, camera, arrowProg, gl );
 
 		window.Present();
 	}

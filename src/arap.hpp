@@ -35,12 +35,18 @@ class ARAPDeform
 			for( size_t i=0; i<mMesh->vertices.size(); ++i )
 			{
 				meshVertices.push_back( mMesh->vertices[i].cast<double>() );
+				oldVertices.push_back( mMesh->vertices[i].cast<double>() );
+				newVertices.push_back( mMesh->vertices[i].cast<double>() );
 			}
 			isControlVertex = std::vector<bool>( mMesh->vertices.size(), false );
 			isFixedVertex = std::vector<bool>( mMesh->vertices.size(), false );
 			clearData();
 
 			laplacianComputed = false;
+			updatedVertices = false;
+
+			maxIter = 10;
+			iter = 0;
 		}
 
 		void clearData()
@@ -58,6 +64,7 @@ class ARAPDeform
 		{
 			isControlVertex[vid] = true;
 			meshVertices[vid] = newPos.cast<double>();
+			updatedVertices = true;
 		}
 
 		void setControlVertex( int vid )
@@ -90,12 +97,10 @@ class ARAPDeform
 			{
 				if( isControlVertex[i] )
 				{
-//					std::cout << meshVertices[i] << sep;
 					meshVertices[i] += t.cast<double>();
-//					std::cout << meshVertices[i] << sep;
 				}
 			}
-			applyDeformation();
+			updatedVertices = true;
 		}
 
 		void clearFixedVertices()
@@ -134,8 +139,6 @@ class ARAPDeform
 					std::vector<int> vring = mMesh->oneRingFaces[v];
 
 					std::vector<int> inter = intersection( vring, ovring );
-//					std::cout << v << " " << ov << std::endl;
-//					std::cout << inter.size() << std::endl;
 
 					assert( inter.size() == 2 );
 					std::vector<int> sharedvs;
@@ -147,32 +150,20 @@ class ARAPDeform
 						sharedvs.push_back( mMesh->sharedVertexOnFace(v, ov, inter[1]) );
 						assert(sharedvs[1] != -1);
 
-						Eigen::Vector3d p = mMesh->vertices[v].cast<double>();
-						Eigen::Vector3d p1 = mMesh->vertices[sharedvs[0]].cast<double>();
-						Eigen::Vector3d p2 = mMesh->vertices[ov].cast<double>();
-						Eigen::Vector3d p3 = mMesh->vertices[sharedvs[1]].cast<double>();
+						Eigen::Vector3d p = oldVertices[v];
+						Eigen::Vector3d p1 = oldVertices[sharedvs[0]];
+						Eigen::Vector3d p2 = oldVertices[ov];
+						Eigen::Vector3d p3 = oldVertices[sharedvs[1]];
 
 						w = (p-p1).dot(p2-p1) / (p-p1).cross(p2-p1).norm() + 
 							(p-p3).dot(p2-p3) / (p-p3).cross(p2-p3).norm();
 						w = w / 2.0f;
+
+						w = 1.0f;
 					} 
-					else if( inter.size() == 1 )
-					{
-						sharedvs.push_back( mMesh->sharedVertexOnFace(v, ov, inter[0]) );
-						assert(sharedvs[0] != -1);
-
-						Eigen::Vector3d p = mMesh->vertices[v].cast<double>();
-						Eigen::Vector3d p1 = mMesh->vertices[sharedvs[0]].cast<double>();
-						Eigen::Vector3d p2 = mMesh->vertices[ov].cast<double>();
-
-						w = (p-p1).dot(p2-p1) / (p-p1).cross(p2-p1).norm();
-						w = w / 2.0f;
-					}
 
 					ringWeights.push_back( w );
 				}
-
-//				if( v==1 )std::cout << std::endl;
 				weights.push_back( ringWeights );
 			}
 		}
@@ -188,7 +179,6 @@ class ARAPDeform
 			for( size_t v=0; v < mMesh->oneRings.size(); ++v )
 			{
 				double w = 0.0f;
-//				mMesh->changeVertexPos(v,meshVertices[v].cast<float>());
 				if( !(isFixedVertex[v] || isControlVertex[v]) )
 				{
 					for( size_t itRing = 0; itRing < mMesh->oneRings[v].size(); ++itRing )
@@ -206,8 +196,6 @@ class ARAPDeform
 				laplacian.coeffRef(v,v) = w;
 			}
 
-//			std::cout << laplacian << sep;
-
 			laplacianT = laplacian.transpose();
 			solver.compute( laplacianT * laplacian );
 
@@ -216,10 +204,10 @@ class ARAPDeform
 
 		void applyDeformation()
 		{
-			clearData();
-			computeWeights();
 			if( !laplacianComputed ) preProcess();
-			for( int it=0; it<10; ++it )
+			oldVertices = newVertices;
+
+			for( int it=0; it<1; ++it )
 			{
 				for( size_t vid = 0; vid < mMesh->vertices.size(); ++vid )
 				{
@@ -231,8 +219,7 @@ class ARAPDeform
 						for( size_t itRing=0; itRing < mMesh->oneRings[vid].size(); ++itRing)
 						{
 							size_t adjV = mMesh->oneRings[vid][itRing];
-							Eigen::Vector3d eij = mMesh->vertices[vid].cast<double>() - 
-								mMesh->vertices[adjV].cast<double>();
+							Eigen::Vector3d eij = oldVertices[vid] - oldVertices[adjV];
 							Eigen::Vector3d RiRjE = (rotations[vid]+rotations[adjV])*eij;
 
 							p+=RiRjE * (weights[vid][itRing] / 2.0f);
@@ -242,14 +229,9 @@ class ARAPDeform
 					for( int i=0; i<3; ++i) b[i][vid] = p[i];
 
 				}
-				
-//				for( size_t i=0; i<mMesh->vertices.size(); ++i)
-//					std::cout << b[0][i] << " " << b[1][i] << " " << b[2][i] << sep;
 
 				for( int i=0; i<3; ++i) 
 					pline[i] = solver.solve(laplacianT * b[i]);
-
-				if( it > 0 ) computeRotations();
 			}
 
 			for( size_t vid = 0; vid < mMesh->vertices.size(); ++vid )
@@ -257,8 +239,12 @@ class ARAPDeform
 				meshVertices[vid] = Eigen::Vector3d(
 						pline[0][vid], pline[1][vid], pline[2][vid]);
 
+				newVertices[vid] = Eigen::Vector3d(
+						pline[0][vid], pline[1][vid], pline[2][vid]);
+
 				mMesh->changeVertexPos(vid, meshVertices[vid].cast<float>());
 			}
+			updatedVertices = false;
 		}
 
 		void computeRotations()
@@ -268,7 +254,6 @@ class ARAPDeform
 			for( size_t vid=0; vid<meshVertices.size(); ++vid )
 			{
 				int ringSize = mMesh->oneRings[vid].size();
-				int degree = 0;
 
 				Eigen::MatrixXd P(3, ringSize), Pline(3,ringSize);
 
@@ -276,27 +261,19 @@ class ARAPDeform
 				{
 					int adjV = mMesh->oneRings[vid][itRing];
 
-					P.col(degree) = (mMesh->vertices[vid].cast<double>() - 
-							mMesh->vertices[adjV].cast<double>()) * weights[vid][itRing];
-
-					Pline.col(degree++)=Eigen::Vector3d( pline[0][vid], pline[1][vid], pline[2][vid])
-						-Eigen::Vector3d( pline[0][adjV], pline[1][adjV], pline[2][adjV]);
+					P.col(itRing) = (oldVertices[vid]-oldVertices[adjV]) * weights[vid][itRing];
+					Pline.col(itRing)= (newVertices[vid] - newVertices[adjV]);
 				}
 
 				Eigen::MatrixXd S = P * Pline.transpose();
 
-				Eigen::JacobiSVD<Eigen::MatrixXd> svd(S, Eigen::ComputeThinU|Eigen::ComputeThinV);
+				Eigen::JacobiSVD<Eigen::MatrixXd> svd(S, Eigen::ComputeFullU|Eigen::ComputeFullV);
 				Eigen::MatrixXd V = svd.matrixV();
 				Eigen::MatrixXd Ut = svd.matrixU().transpose();
 
 				//Trick to guarantee rotation, not reflection.
 				id(2,2) = (V*Ut).determinant();
 				rotations[vid] = (V*id*Ut);
-				
-//				std::cout << rotations[vid] << sep;
-				
-//				std::cout << P << sep;
-//				std::cout << Pline << sep;
 			}
 
 		}
@@ -304,21 +281,27 @@ class ARAPDeform
 		std::vector<bool> isFixedVertex;
 		std::vector<bool> isControlVertex;
 
+		bool laplacianComputed;
+		bool updatedVertices;
+
+		int maxIter;
+		int iter;
+
 	private:
 		StandardMesh* mMesh;
 
 		Eigen::SparseMatrix<double> laplacian;
 		Eigen::SparseMatrix<double> laplacianT;
-		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
+		Eigen::SimplicialLDLT<Eigen::SparseMatrix<double> > solver;
 
 		std::vector<Eigen::Vector3d> meshVertices;
+		std::vector<Eigen::Vector3d> oldVertices;
+		std::vector<Eigen::Vector3d> newVertices;
 
 		std::vector< std::vector<double> > weights;
 		std::vector<Eigen::Matrix3d> rotations;
 		std::vector<Eigen::VectorXd> pline;
 		std::vector<Eigen::VectorXd> b;
-
-		bool laplacianComputed;
 };
 
 }

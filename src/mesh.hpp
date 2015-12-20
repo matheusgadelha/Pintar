@@ -293,6 +293,12 @@ class Mesh : public Object
 			}
 		}
 
+		void updateVertices( const std::vector<Eigen::Vector3d>& nverts )
+		{
+			for(int i=0; i<nverts.size(); ++i)
+				changeVertexPos(i,nverts[i].cast<float>());
+		}
+
 		std::vector<Eigen::Vector3f> vertices;
 		T* raw_data;
 		size_t raw_data_size;

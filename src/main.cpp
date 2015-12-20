@@ -170,6 +170,7 @@ int main( int argc, char** argv)
 		{
 			drawArrow(arrow, arrOrigin, arrDest, 
 					GL::Vec3(1.0,1.0,0.3), arrow_vao, camera, arrowProg, gl );
+			mesh.updateVertices( arap.newVertices );
 		}
 
 		window.Present();
